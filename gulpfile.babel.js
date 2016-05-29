@@ -1,6 +1,7 @@
 import gulp from 'gulp';
 import path from 'path';
 import {config} from './gulp/gulp.config';
+import del from 'del';
 import eslint from 'gulp-eslint';
 import $if from 'gulp-if';
 import cache from 'gulp-cache';
@@ -8,19 +9,25 @@ import imagemin from 'gulp-imagemin';
 import size from 'gulp-size';
 import wiredep from 'wiredep';
 import postcss from 'gulp-postcss';
-import sass from 'gulp-sass';
+import precss from 'precss';
+import stylelint from 'stylelint';
 import autoprefixer from 'autoprefixer';
 import sourcemaps from 'gulp-sourcemaps';
 import cssnano from 'cssnano';
 import browserSync from 'browser-sync';
+import * as gutil from 'gulp-util';
 
-// import {clean, bowerify} from './gulp/utils';
-// import {styles, stylesDev} from './gulp/styles';
-// import scripts from './gulp/scripts';
-// import copy from './gulp/copy';
-// import * as gutil from 'gulp-util';
-//
-// const reload = browserSync.reload;
+const reload = browserSync.reload;
+
+// Clean temp and dist folders
+const clean = () => {
+  gutil.log('Cleaning workspace directory');
+
+  return del([
+    config.dist,
+    config.temp
+  ]);
+};
 
 // Lint JavaScript
 const lint = () =>
@@ -56,15 +63,17 @@ const bowerify = () =>
     .pipe(wiredep.stream())
     .pipe(gulp.dest(config.temp));
 
-// Styles
+// postcss
 const processors = [
+  precss(),
+  stylelint(),
   autoprefixer({browsers: config.autoprefixer}),
   cssnano()
 ];
 
+// Styles
 const styles = () =>
-  gulp.src(path.join(config.src, config.styles, '*.scss'))
-    .pipe(sass().on('error', sass.logError))
+  gulp.src(path.join(config.src, config.styles, 'main.css'))
     .pipe(sourcemaps.init())
     .pipe(postcss(processors))
     .pipe(sourcemaps.write('.'))
@@ -83,9 +92,41 @@ const startServer = () =>
     }
   });
 
-const serve = gulp.series(bowerify,
+const watch = () => {
+  gutil.log('Whatching for file changes...');
+
+  gulp.watch([
+    path.join(config.src, '*.*'),
+    path.join('!', config.src, '*.html')
+  ]).on('change', gulp.series(copy, reload));
+
+  gulp.watch(
+    path.join(config.src, config.styles, '*.css')
+  ).on('change', gulp.series(styles, reload));
+
+  gulp.watch(
+    path.join(config.src, config.scripts, '**/*.js')
+  ).on('change', gulp.series(lint, reload));
+};
+
+const serve = gulp.series(
+    clean,
+    bowerify,
     gulp.parallel(copy, styles, images),
-    startServer);
+    gulp.parallel(startServer, watch)
+  );
+
+export {
+  clean,
+  lint,
+  images,
+  copy,
+  bowerify,
+  styles,
+  serve
+};
+
+export default serve;
 
 // const setProd = cb => {
 //   env.env = 'PROD';
@@ -99,15 +140,6 @@ const serve = gulp.series(bowerify,
 //   return cb();
 // };
 //
-// const watch = () => {
-//   gutil.log('Whatching for file changes...');
-//
-//   gulp.watch(config.files).on('change', gulp.series(copy, reload));
-//   gulp.watch(config.styles.src).on('change', gulp.series(styles, reload));
-//   gulp.watch(config.scripts.src).on('change', gulp.series(scripts, reload));
-// };
-//
-//
 // const compile = gulp.series(
 //     clean,
 //     bowerify,
@@ -119,19 +151,3 @@ const serve = gulp.series(bowerify,
 //   );
 //
 // const build = gulp.series(setProd, compile);
-// const serve = gulp.series(compile, gulp.parallel(startServer, watch));
-//
-export {
-  lint,
-  images,
-  copy,
-  bowerify,
-  styles,
-  serve
-};
-// clean,
-// build,
-// serve,
-// watch
-
-// export default build;

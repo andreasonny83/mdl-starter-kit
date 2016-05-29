@@ -20,6 +20,7 @@ const config = {
   images: 'images',
   scripts: 'scripts',
   styles: 'styles',
+  autoprefixer: AUTOPREFIXER
   // temp: {
   //   base: temp,
   //   libs: path.join(temp, 'libs'),
@@ -34,8 +35,7 @@ const config = {
   //     path.join(temp, 'scripts', '*.js')
   //   ]
   // },
-  bowers: path.join(src, 'bower_components'),
-  autoprefixer: AUTOPREFIXER
+  // bowers: path.join(src, 'bower_components'),
   // files: [
   //   path.join(src, '*.html')
   // ]
