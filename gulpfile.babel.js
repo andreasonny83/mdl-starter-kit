@@ -18,6 +18,7 @@ import webpack from 'webpack';
 import webpackStream from 'webpack-stream';
 import size from 'gulp-size';
 import wiredep from 'wiredep';
+import htmlmin from 'gulp-htmlmin';
 import postcss from 'gulp-postcss';
 import atImport from 'postcss-import';
 import stylelint from 'stylelint';
@@ -25,7 +26,6 @@ import postcssBanner from 'postcss-banner';
 import autoprefixer from 'autoprefixer';
 import useref from 'gulp-useref';
 import sourcemaps from 'gulp-sourcemaps';
-import rename from 'gulp-rename';
 import cssnano from 'cssnano';
 import rev from 'gulp-rev';
 import collect from 'gulp-rev-collector';
@@ -35,6 +35,8 @@ import * as gutil from 'gulp-util';
 import pkg from './package.json';
 
 let version = pkg.version;
+let myGlobal = {};
+myGlobal.fileName = null;
 
 const reload = cb => {
   browserSync.reload();
@@ -118,7 +120,8 @@ const copy = () =>
 const renderIndex = () =>
   gulp.src(path.join(config.temp, 'index.html'))
     .pipe(useref())
-    .pipe(gulp.dest(config.temp));
+    .pipe($if('*.html', htmlmin({collapseWhitespace: true})))
+    .pipe(gulp.dest(config.dist));
 
 // Inject Bower packages
 const bowerify = () =>
@@ -135,6 +138,9 @@ const processors = [
   postcssBanner({banner: banner(), inline: true})
 ];
 
+/**
+ * Set a new path version in the package.json
+ */
 const versionify = () =>
   gulp.src('./package.json')
     .pipe(bump({type: 'patch'}))
@@ -154,12 +160,12 @@ const stylesBuild = () =>
   gulp.src(path.join(config.src, config.styles, '*.css'))
     .pipe(postcss(processors))
     .on('error', console.log)
-    .pipe(rename({
-      suffix: ".min"
-    }))
-    .pipe(rev())
-    .pipe(gulp.dest(path.join(config.temp, config.styles)))
-    .pipe(rev.manifest())
+    // .pipe(rename({
+    //   suffix: ".min"
+    // }))
+    // .pipe(rev())
+    // .pipe(gulp.dest(path.join(config.temp, config.styles)))
+    // .pipe(rev.manifest())
     .pipe(gulp.dest(path.join(config.temp, config.styles)));
 
 // Scripts
@@ -187,7 +193,7 @@ const scriptsBuild = () =>
   gulp.src(path.join(config.src, config.scripts, 'main.js'))
     .pipe(webpackStream({
       output: {
-        filename: 'main.min.js'
+        filename: 'main.js'
       },
       plugins: [
         new webpack.optimize.UglifyJsPlugin({
@@ -207,27 +213,27 @@ const scriptsBuild = () =>
         ]
       }
     }))
-    .pipe(rev())
-    .pipe(gulp.dest(path.join(config.temp, config.scripts)))
-    .pipe(rev.manifest())
+    // .pipe(rev())
+    // .pipe(gulp.dest(path.join(config.temp, config.scripts)))
+    // .pipe(rev.manifest())
     .pipe(gulp.dest(path.join(config.temp, config.scripts)));
 
-const revs = () =>
-  gulp.src([
-    path.join(config.temp, config.scripts, '**/main.min.js'),
-    path.join(config.temp, config.styles, '**/main.min.css')
-  ], {base: config.temp})
-  .pipe(rev())
-  .pipe(gulp.dest(path.join(config.dist)))
-  .pipe(rev.manifest())
-  .pipe(gulp.dest(path.join(config.dist)));
+// const revs = () =>
+//   gulp.src([
+//     path.join(config.temp, config.scripts, '**/main.min.js'),
+//     path.join(config.temp, config.styles, '**/main.min.css')
+//   ], {base: config.temp})
+//   .pipe(rev())
+//   .pipe(gulp.dest(path.join(config.dist)))
+//   .pipe(rev.manifest())
+//   .pipe(gulp.dest(path.join(config.dist)));
 
-const collects = () =>
-  gulp.src([
-    path.join(config.temp, '/**/*.json'),
-    path.join(config.temp, 'index.html')
-  ]).pipe(collect())
-  .pipe(gulp.dest(config.temp));
+// const collects = () =>
+//   gulp.src([
+//     path.join(config.temp, '/**/*.json'),
+//     path.join(config.temp, 'index.html')
+//   ]).pipe(collect())
+//   .pipe(gulp.dest(config.temp));
 
 const startServer = cb => {
   browserSync.init({
@@ -240,6 +246,19 @@ const startServer = cb => {
       routes: {
         '/bower_components': 'bower_components'
       }
+    },
+    notify: false,
+    port: 3000
+  });
+
+  return cb();
+};
+
+const startServerDist = cb => {
+  browserSync.init({
+    logPrefix: 'mdl-starter-kit',
+    server: {
+      baseDir: config.dist
     },
     notify: false,
     port: 3000
@@ -280,30 +299,21 @@ const serve = gulp.series(
 
 const build = gulp.series(
     clean,
-    versionify,
     bowerify,
-    gulp.parallel(copy, styles, scripts, images),
-    renderIndex,
-    revs
+    gulp.parallel(copy, stylesBuild, scriptsBuild, images),
+    renderIndex
+  );
+
+const serveDist = gulp.series(
+    build,
+    gulp.parallel(startServerDist)
   );
 
 export {
-  clean,
-  lint,
-  images,
-  copy,
-  bowerify,
   versionify,
-  styles,
-  stylesBuild,
-  scripts,
-  scriptsBuild,
-  revs,
-  collects,
   serve,
-  build,
-  renderIndex,
-  watch
+  serveDist,
+  build
 };
 
 export default serve;
