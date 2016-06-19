@@ -2,7 +2,7 @@
 	"rules": {
 		"color-hex-length": "short",
 		"comment-empty-line-before": "always",
-		"string-quotes": "double",
+		"string-quotes": "single",
 		"selector-no-vendor-prefix": true
 	}
 }

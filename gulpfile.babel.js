@@ -1,3 +1,11 @@
+/**
+  Material Design Lite Starter Kit
+  Copyright (c) 2016 by andreasonny83. All Rights Reserved.
+
+  This code may only be used under the MIT style license.
+
+  MIT license: https://andreasonny.mit-license.org/@2016/
+*/
 import gulp from 'gulp';
 import path from 'path';
 import {config} from './gulp/gulp.config';
@@ -6,18 +14,68 @@ import eslint from 'gulp-eslint';
 import $if from 'gulp-if';
 import cache from 'gulp-cache';
 import imagemin from 'gulp-imagemin';
+import webpack from 'webpack';
+import webpackStream from 'webpack-stream';
 import size from 'gulp-size';
 import wiredep from 'wiredep';
 import postcss from 'gulp-postcss';
-import precss from 'precss';
+import atImport from 'postcss-import';
 import stylelint from 'stylelint';
+import postcssBanner from 'postcss-banner';
 import autoprefixer from 'autoprefixer';
+import useref from 'gulp-useref';
 import sourcemaps from 'gulp-sourcemaps';
+import rename from 'gulp-rename';
 import cssnano from 'cssnano';
+import rev from 'gulp-rev';
+import collect from 'gulp-rev-collector';
+import bump from 'gulp-bump';
 import browserSync from 'browser-sync';
 import * as gutil from 'gulp-util';
+import pkg from './package.json';
 
-const reload = browserSync.reload;
+let version = pkg.version;
+
+const reload = cb => {
+  browserSync.reload();
+
+  cb();
+};
+
+const now = () => {
+  let now = new Date();
+
+  return [[now.getUTCFullYear(),
+    now.getUTCMonth() + 1,
+    now.getUTCDate()
+  ].join('-'),
+  [now.getUTCHours(),
+    now.getUTCMinutes(),
+    now.getUTCSeconds()
+  ].join(':')].join(' ');
+};
+
+const banner = () =>
+  ['Material Design Lite Starter Kit',
+    'v.' + version + ' - ' + now(),
+    '\nCopyright (c) 2016 by andreasonny83. All Rights Reserved.',
+    'This code may only be used under the MIT style license.',
+    '\nMIT license: https://andreasonny.mit-license.org/@2016/'
+  ].join('\n');
+
+/**
+ * webpack plugins
+ *
+ * @type {Array}
+ */
+const webpackPlugins = [
+  new webpack.optimize.UglifyJsPlugin({
+    compress: {
+      warnings: false
+    }
+  }),
+  new webpack.BannerPlugin(banner())
+];
 
 // Clean temp and dist folders
 const clean = () => {
@@ -57,6 +115,11 @@ const copy = () =>
   }).pipe(gulp.dest(config.dist))
     .pipe(size({title: 'copy'}));
 
+const renderIndex = () =>
+  gulp.src(path.join(config.temp, 'index.html'))
+    .pipe(useref())
+    .pipe(gulp.dest(config.temp));
+
 // Inject Bower packages
 const bowerify = () =>
   gulp.src(path.join(config.src, 'index.html'))
@@ -65,55 +128,163 @@ const bowerify = () =>
 
 // postcss
 const processors = [
-  precss(),
   stylelint(),
+  atImport(),
   autoprefixer({browsers: config.autoprefixer}),
-  cssnano()
+  cssnano(),
+  postcssBanner({banner: banner(), inline: true})
 ];
+
+const versionify = () =>
+  gulp.src('./package.json')
+    .pipe(bump({type: 'patch'}))
+    .pipe(gulp.dest('./'));
 
 // Styles
 const styles = () =>
-  gulp.src(path.join(config.src, config.styles, 'main.css'))
+  gulp.src(path.join(config.src, config.styles, '*.css'))
     .pipe(sourcemaps.init())
     .pipe(postcss(processors))
+    .on('error', console.log)
     .pipe(sourcemaps.write('.'))
+    .pipe(gulp.dest(path.join(config.temp, config.styles)))
+    .pipe(browserSync.stream({match: '**/*.css'}));
+
+const stylesBuild = () =>
+  gulp.src(path.join(config.src, config.styles, '*.css'))
+    .pipe(postcss(processors))
+    .on('error', console.log)
+    .pipe(rename({
+      suffix: ".min"
+    }))
+    .pipe(rev())
+    .pipe(gulp.dest(path.join(config.temp, config.styles)))
+    .pipe(rev.manifest())
     .pipe(gulp.dest(path.join(config.temp, config.styles)));
 
-const startServer = () =>
+// Scripts
+const scripts = () =>
+  gulp.src(path.join(config.src, config.scripts, 'main.js'))
+    .pipe(webpackStream({
+      output: {
+        filename: 'main.js'
+      },
+      plugins: webpackPlugins,
+      devtool: 'source-map',
+      module: {
+        loaders: [
+          {
+            test: /\.js$/,
+            exclude: /node_modules/,
+            loader: 'babel-loader'
+          }
+        ]
+      }
+    }))
+    .pipe(gulp.dest(path.join(config.temp, config.scripts)));
+
+const scriptsBuild = () =>
+  gulp.src(path.join(config.src, config.scripts, 'main.js'))
+    .pipe(webpackStream({
+      output: {
+        filename: 'main.min.js'
+      },
+      plugins: [
+        new webpack.optimize.UglifyJsPlugin({
+          compress: {
+            warnings: false
+          }
+        }),
+        new webpack.BannerPlugin(banner())
+      ],
+      module: {
+        loaders: [
+          {
+            test: /\.js$/,
+            exclude: /node_modules/,
+            loader: 'babel-loader'
+          }
+        ]
+      }
+    }))
+    .pipe(rev())
+    .pipe(gulp.dest(path.join(config.temp, config.scripts)))
+    .pipe(rev.manifest())
+    .pipe(gulp.dest(path.join(config.temp, config.scripts)));
+
+const revs = () =>
+  gulp.src([
+    path.join(config.temp, config.scripts, '**/main.min.js'),
+    path.join(config.temp, config.styles, '**/main.min.css')
+  ], {base: config.temp})
+  .pipe(rev())
+  .pipe(gulp.dest(path.join(config.dist)))
+  .pipe(rev.manifest())
+  .pipe(gulp.dest(path.join(config.dist)));
+
+const collects = () =>
+  gulp.src([
+    path.join(config.temp, '/**/*.json'),
+    path.join(config.temp, 'index.html')
+  ]).pipe(collect())
+  .pipe(gulp.dest(config.temp));
+
+const startServer = cb => {
   browserSync.init({
+    logPrefix: 'mdl-starter-kit',
     server: {
       baseDir: [
         config.temp,
         config.src
       ],
       routes: {
-        '/bower_components': './bower_components'
+        '/bower_components': 'bower_components'
       }
-    }
+    },
+    notify: false,
+    port: 3000
   });
 
-const watch = () => {
-  gutil.log('Whatching for file changes...');
+  return cb();
+};
 
+const watch = cb => {
   gulp.watch([
     path.join(config.src, '*.*'),
     path.join('!', config.src, '*.html')
-  ]).on('change', gulp.series(copy, reload));
+  ],
+  gulp.series(copy, reload));
+
+  gulp.watch([
+    path.join(config.src, 'index.html')
+  ],
+  gulp.series(bowerify, reload));
 
   gulp.watch(
-    path.join(config.src, config.styles, '*.css')
-  ).on('change', gulp.series(styles, reload));
+    path.join(config.src, config.styles, '**/*.css'),
+    styles);
 
   gulp.watch(
-    path.join(config.src, config.scripts, '**/*.js')
-  ).on('change', gulp.series(lint, reload));
+    path.join(config.src, config.scripts, '**/*.js'),
+    gulp.series(lint, scripts, reload));
+
+  return cb();
 };
 
 const serve = gulp.series(
     clean,
     bowerify,
-    gulp.parallel(copy, styles, images),
+    gulp.parallel(copy, styles, scripts, images),
     gulp.parallel(startServer, watch)
+  );
+
+const build = gulp.series(
+    clean,
+    versionify,
+    bowerify,
+    gulp.parallel(copy, styles, scripts, images),
+    renderIndex,
+    revs
   );
 
 export {
@@ -122,32 +293,17 @@ export {
   images,
   copy,
   bowerify,
+  versionify,
   styles,
-  serve
+  stylesBuild,
+  scripts,
+  scriptsBuild,
+  revs,
+  collects,
+  serve,
+  build,
+  renderIndex,
+  watch
 };
 
 export default serve;
-
-// const setProd = cb => {
-//   env.env = 'PROD';
-//
-//   gutil.log(
-//       'Compiling APP in',
-//       gutil.colors.magenta(env.env),
-//       'mode'
-//     );
-//
-//   return cb();
-// };
-//
-// const compile = gulp.series(
-//     clean,
-//     bowerify,
-//     gulp.parallel(
-//       stylesDev,
-//       scripts
-//     ),
-//     copy
-//   );
-//
-// const build = gulp.series(setProd, compile);

@@ -1,3 +1,6 @@
-@import "reset";
-@import "demo";
-@import "view-source";
+/* Globals */
+@import 'globals/reset.css';
+
+/* Demo */
+@import 'demo/demo.css';
+@import 'demo/view-source.css';
