@@ -15,10 +15,10 @@ To build and run this project you need to have
 [NPM](https://www.npmjs.org/) and
 [Gulp v4](https://github.com/gulpjs/gulp/tree/4.0).
 
-Install all the npm dependencies with:
+Install all the npm and Bower dependencies with:
 
 ```sh
-npm Install
+npm Install && bower install
 ```
 
 ## Running the site
